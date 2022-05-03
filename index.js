@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import joi from "joi";
 import dotenv from "dotenv";
+import dayjs from "dayjs";
 import { MongoClient } from "mongodb";
 
 const app = express();
@@ -57,5 +58,103 @@ app.get("/participants", async (req, res) => {
     res.send(users);
     mongoClient.close();
 })
+
+app.post("/messages", async (req, res) => {
+    const { to, text, type } = req.body;
+    const { user } = req.headers;
+
+    const messagesSchema = joi.object({
+        to: joi.string().required(),
+        text: joi.string().required(),
+        type: joi.string().pattern(/^message|private_message$/),
+        from: joi.string().valid(user)
+    })
+
+    const validation = messagesSchema.validateAsync({ to, text, type, from: user });
+
+    if (validation.error) {
+        return res.sendStatus(422);
+    } 
+    
+    const userMessage = {
+        to,
+        text,
+        type,
+        time: dayjs().format('HH:mm:ss'),
+        from: user
+    }
+    console.log(userMessage);
+    try {
+        await mongoClient.connect();
+        const db = mongoClient.db("local");
+        await db.collection("userMessages").insertOne(userMessage)
+        res.sendStatus(201);
+        mongoClient.close();
+    }
+    catch (e) {
+        res.sendStatus(500);
+        mongoClient.close();
+    }
+
+})
+
+app.get("/messages", async (req, res) => {
+    const { limit } = req.query;
+    const { user } = req.headers;
+
+    await mongoClient.connect();
+    const db = mongoClient.db("local");
+    const to = await db.collection("userMessages").findOne({to: user});
+    const from = await db.collection("userMessages").findOne({from: user});
+    const users = await db.collection("userMessages").find({}).toArray();
+    const userMessage = [];
+
+    if (!to && !from) {
+        res.send(404);
+    }
+
+    for (let i = 0; i < users.length; i++) {
+        if (users[i].type == "message" || users[i].type == "status") {
+            userMessage.push(users[i]);
+        }
+        if (users[i].type == "private_message" && (users[i].to == user || users[i].from == user)) {
+            userMessage.push(users[i]);
+        }
+    }
+
+    if (!limit) {
+        res.send(userMessage);
+    } else {
+        const slicedArray = userMessage.reverse().splice(0, limit).reverse();
+        res.send(slicedArray);
+    }
+    mongoClient.close();
+})
+
+app.post("/status", async (req, res) => {
+    const { user } = req.headers;
+    const userStatus = {
+        lastStatus: Date.now()
+    };
+
+    try {
+        await mongoClient.connect();
+        const db = mongoClient.db("local");
+        const verification = await db.collection("user").findOne({name: user});
+        if (!verification) {
+            res.send(404);
+        }
+        else {
+            await db.collection("user").updateOne({name: user}, {$set: userStatus});
+        }
+        res.sendStatus(201);
+        mongoClient.close();
+    }
+    catch (e) {
+        res.sendStatus(500);
+        mongoClient.close();
+    }
+}) 
+
 
 app.listen(5000);
