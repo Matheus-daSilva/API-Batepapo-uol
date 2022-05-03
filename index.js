@@ -17,7 +17,7 @@ app.post("/participants", async (req, res) => {
     const loginSchema = joi.object({
         name: joi.string().required(),
     });
-    const validation = loginSchema.validate({name});
+    const validation = loginSchema.validate({ name });
 
     if (validation.error) {
         return res.sendStatus(422);
@@ -48,6 +48,14 @@ app.post("/participants", async (req, res) => {
         mongoClient.close();
     }
 
+})
+
+app.get("/participants", async (req, res) => {
+    await mongoClient.connect();
+    const db = mongoClient.db("local");
+    const users = await db.collection("user").find({}).toArray();
+    res.send(users);
+    mongoClient.close();
 })
 
 app.listen(5000);
