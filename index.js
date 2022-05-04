@@ -28,13 +28,11 @@ app.post("/participants", async (req, res) => {
         name,
         lastStatus: Date.now()
     };
-    console.log(loginName)
 
     try {
         await mongoClient.connect();
         const db = mongoClient.db("local");
         const thereIs = await db.collection("user").findOne({ name });
-        console.log(thereIs)
         if (thereIs) {
             return res.sendStatus(409);
         } else {
@@ -44,7 +42,6 @@ app.post("/participants", async (req, res) => {
         mongoClient.close();
     }
     catch (e) {
-        console.log(e)
         res.sendStatus(500);
         mongoClient.close();
     }
@@ -74,8 +71,8 @@ app.post("/messages", async (req, res) => {
 
     if (validation.error) {
         return res.sendStatus(422);
-    } 
-    
+    }
+
     const userMessage = {
         to,
         text,
@@ -104,8 +101,8 @@ app.get("/messages", async (req, res) => {
 
     await mongoClient.connect();
     const db = mongoClient.db("local");
-    const to = await db.collection("userMessages").findOne({to: user});
-    const from = await db.collection("userMessages").findOne({from: user});
+    const to = await db.collection("userMessages").findOne({ to: user });
+    const from = await db.collection("userMessages").findOne({ from: user });
     const users = await db.collection("userMessages").find({}).toArray();
     const userMessage = [];
 
@@ -140,12 +137,12 @@ app.post("/status", async (req, res) => {
     try {
         await mongoClient.connect();
         const db = mongoClient.db("local");
-        const verification = await db.collection("user").findOne({name: user});
+        const verification = await db.collection("user").findOne({ name: user });
         if (!verification) {
             res.send(404);
         }
         else {
-            await db.collection("user").updateOne({name: user}, {$set: userStatus});
+            await db.collection("user").updateOne({ name: user }, { $set: userStatus });
         }
         res.sendStatus(201);
         mongoClient.close();
@@ -154,7 +151,30 @@ app.post("/status", async (req, res) => {
         res.sendStatus(500);
         mongoClient.close();
     }
-}) 
+})
 
+const removeParticipants = async () => {
+    const time = Date.now();
+    await mongoClient.connect();
+    const activedUser = await mongoClient.collection("user").find({}).toArray();
+    for (let i = 0; i < deactivatedUsers.length; i++) {
+        if (activedUser[i].lastStatus < time - 10000) {
+                const verification =activedUser[i].name
+                const deleted = await db.collection("participants").findOne({verification})
+                await db.collection("participants").deleteOne({deleted});
+                await database.collection("menssages").insertOne({
+                    from: verification,
+                    to: "Todos",
+                    text: "sai na sala...",
+                    type: "status",
+                    time: dayjs().format("HH:mm:ss")
+                });
+        }
+    }
+    mongoClient.close();
+
+}
+
+setInterval(removeParticipants, 10000);
 
 app.listen(5000);
